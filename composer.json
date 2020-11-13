@@ -1,0 +1,20 @@
+{
+	"name": "byancode/requestcurl",
+	"description": "Multicurl Async",
+	"type": "php, composer-plugin, library",
+	"authors": [
+		{
+			"name": "byancode",
+			"email": "byancode@gmail.com"
+		}
+	],
+	"require": {},
+	"autoload": {
+		"files": [
+			"src/RequestCurl.php"
+		],
+		"psr-4": {
+			"Byancode\\": "src"
+		}
+	}
+}
