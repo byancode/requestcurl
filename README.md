@@ -21,7 +21,7 @@ $request->add(string $method, string $url, array $fields = null, array $options 
 $request->get(string $url, array $fields = null, array $options = [])
 ```
 
-## Usage2
+## Usage 2
 
 ```php
 # return string response
