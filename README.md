@@ -10,19 +10,20 @@ composer require byancode/requestcurl
 
 ## Usage
 
-```
+```php
+/***************************************************************************************
 @param string   $method   = OPTIONS, GET, POST, PUT, PATCH, DELETE, HEAD, LINK, UNLINK
 @param string   $url      = https://...
 @param array    $fields   = [ "name" => "byancode" ] or null
 @param array    $options  = [ CURLOPT_HTTPHEADER => [ "Accept" => "application/json" ] ]
-------------------
-RequestCurl $request->add(string $method, string $url, array $fields = null, array $options = [])
-RequestCurl $request->get(string $url, array $fields = null, array $options = [])
+***************************************************************************************/
+$request->add(string $method, string $url, array $fields = null, array $options = [])
+$request->get(string $url, array $fields = null, array $options = [])
 ```
 
 ## Usage2
 
-```
+```php
 # return string response
 $request->get(...)->then(function($data) {
     if (gettype($data) === 'string') {
