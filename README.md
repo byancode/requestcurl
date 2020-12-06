@@ -31,6 +31,8 @@ $request->get(...)->then(function($data) {
     } else {
         echo 'no';
     }
+})->catch(function() {
+    echo 'produced by error curl or http response error code';
 });
 # ----------
 # output: si
@@ -43,6 +45,9 @@ $request->get(...)->then(function(array $data) {
     } else {
         echo 'no';
     }
+})->catch(function(array $responseError) {
+    # get error response converted in array (ideal for apis)
+    echo 'produced by error curl or http response error code';
 });
 # ----------
 # output: si
@@ -54,6 +59,10 @@ $request->get(...)->then(function(object $data) {
     } else {
         echo 'no';
     }
+})->catch(function(array ) {
+    echo 'produced by error curl or http response error code';
+})->catch(function(): string {
+    return 'replace response for this';
 });
 # ----------
 # output: si

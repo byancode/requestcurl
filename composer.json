@@ -1,7 +1,7 @@
 {
 	"name": "byancode/requestcurl",
 	"description": "Multicurl Async",
-	"type": "php, composer-plugin, library",
+	"type": "php",
 	"authors": [
 		{
 			"name": "byancode",
