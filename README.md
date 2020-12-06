@@ -19,6 +19,10 @@ composer require byancode/requestcurl
 ***************************************************************************************/
 $request->add(string $method, string $url, array $fields = null, array $options = [])
 $request->get(string $url, array $fields = null, array $options = [])
+// PROMESA
+$request->get(...)->then(string|array|object $response, array $request_info)
+$request->get(...)->catch(string|array|object $response, array $request_info, string|null $errorMessage)
+$request->get(...)->finally(string|array|object $response, array $request_info)
 ```
 
 ## Usage 2

@@ -7,15 +7,17 @@ $request->add('GET', 'https://restcountries.eu/rest/v2/currency/copdfasd')->then
     return $response[0]['name'];
 })->catch(function (array $responseError): string {
     return 'desconocido';
+})->finally(function ($name) {
+    echo 'Se finalizo con la palabra: ' . $name . PHP_EOL;
 });
 
-$request->get('https://restcountries.eu/rest/v2/currency/pen')->then(function (array $response): string {
-    return $response[0]['name'];
-});
+// $request->get('https://restcountries.eu/rest/v2/currency/pen')->then(function (array $response): string {
+//     return $response[0]['name'];
+// });
 
-$request->get('https://restcountries.eu/rest/v2/currency/mxn')->then(function (array $response): string {
-    return $response[0]['name'];
-});
+// $request->get('https://restcountries.eu/rest/v2/currency/mxn')->then(function (array $response): string {
+//     return $response[0]['name'];
+// });
 
 $request->execute();
 

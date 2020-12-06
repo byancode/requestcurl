@@ -8,6 +8,7 @@ class RequestCurl
     public $response = [];
     private $then = [];
     public $catch = [];
+    public $finally = [];
     const METHODS = ['OPTIONS', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'LINK', 'UNLINK'];
 
     public function add(string $method, string $url, array $fields = null, array $options = [])
@@ -40,6 +41,10 @@ class RequestCurl
         $this->catch[$this->index - 1] = $callback;
         return $this;
     }
+    function finally (callable $callback) {
+        $this->finally[$this->index - 1] = $callback;
+        return $this;
+    }
     public function response(int $index = null)
     {
         return isset($index) ? $this->response[$index] : $this->response;
@@ -64,80 +69,61 @@ class RequestCurl
                 if (curl_errno($this->ch[$i]) === 0) {
                     $this->response[$i] = curl_multi_getcontent($this->ch[$i]);
                     if ($info['http_code'] >= 200 && $info['http_code'] < 300) {
-                        $this->successResponse($i, $info);
+                        $this->promise('then', $i, $info);
                     } else {
-                        $this->errorResponse($i, $info);
+                        $this->promise('catch', $i, $info);
                     }
                 } else {
                     $error = curl_error($this->ch[$i]);
-                    $this->errorResponse($i, $info, $error);
+                    $this->promise('catch', $i, $info, $error);
                 }
+                $this->promise('finally', $i, $info);
                 curl_multi_remove_handle($mh, $this->ch[$i]);
                 curl_close($this->ch[$i]);
             }
         } else {
             $this->response[0] = curl_exec($this->ch[0]);
             $info = curl_getinfo($this->ch[0]);
-            if (curl_errno($this->ch[$i]) === 0) {
+            if (curl_errno($this->ch[0]) === 0) {
                 if ($info['http_code'] >= 200 && $info['http_code'] < 300) {
-                    $this->successResponse(0, $info);
+                    $this->promise('then', 0, $info);
                 } else {
-                    $this->errorResponse($i, $info);
+                    $this->promise('catch', 0, $info);
                 }
             } else {
                 $error = curl_error($this->ch[0]);
-                $this->errorResponse(0, $info, $error);
+                $this->promise('catch', 0, $info, $error);
             }
+            $this->promise('finally', 0, $info);
             curl_close($this->ch[0]);
         }
         return $this;
     }
-    private function errorResponse(int $index, array $info = [], string $error = null)
+    private function promise(string $name, int $index, array $info = [], string $error = null)
     {
         $response = $this->response[$index] ?? '';
-        $callback = $this->catch[$index] ?? function () {};
+        $callback = $this->{$name}[$index] ?? function () {};
         $function = new \ReflectionFunction($callback);
         $argument = $function->getParameters();
         $argument = current($argument);
         if ($argument) {
-            switch ((string) $argument->getType()) {
-                case 'array':
-                    $response = json_decode($response, true);
-                    break;
-                case 'object':
-                    $response = json_decode($response);
-                    break;
-            }
-            if ($function->hasReturnType()) {
-                $this->response[$index] = $callback($response, $info, $error);
-            } else {
-                $callback($response, $info, $error);
-            }
-
-        }
-    }
-    private function successResponse(int $index, array $info = [])
-    {
-        $response = $this->response[$index] ?? '';
-        $callback = $this->then[$index] ?? function () {};
-        $function = new \ReflectionFunction($callback);
-        $argument = $function->getParameters();
-        $argument = current($argument);
-        if ($argument) {
-            switch ((string) $argument->getType()) {
-                case 'array':
-                    $response = json_decode($response, true);
-                    break;
-                case 'object':
-                    $response = json_decode($response);
-                    break;
+            if (is_string($response) === true) {
+                switch ((string) $argument->getType()) {
+                    case 'array':
+                        $response = json_decode($response, true);
+                        break;
+                    case 'object':
+                        $response = json_decode($response);
+                        break;
+                }
             }
             if ($function->hasReturnType()) {
                 $this->response[$index] = $callback($response, $info);
             } else {
                 $callback($response, $info);
             }
-
+        } else {
+            $callback($response, $info);
         }
     }
     public function __call($name, $arguments)
