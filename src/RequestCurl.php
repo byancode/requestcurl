@@ -81,7 +81,7 @@ class RequestCurl
                 curl_multi_remove_handle($mh, $this->ch[$i]);
                 curl_close($this->ch[$i]);
             }
-        } else {
+        } elseif ($this->index === 1) {
             $this->response[0] = curl_exec($this->ch[0]);
             $info = curl_getinfo($this->ch[0]);
             if (curl_errno($this->ch[0]) === 0) {
@@ -148,6 +148,6 @@ class RequestCurl
     public function __destruct()
     {
         $this->index = 0;
-        $this->response = $this->then = $this->catch = $this->ch = [];
+        $this->response = $this->then = $this->catch = $this->finally = $this->ch = [];
     }
 }
