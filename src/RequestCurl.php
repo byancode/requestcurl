@@ -5,10 +5,10 @@ class RequestCurl
 {
     public $ch = [];
     public $index = 0;
-    public $response = [];
     private $then = [];
-    public $catch = [];
-    public $finally = [];
+    private $catch = [];
+    private $finally = [];
+    public $response = [];
     const METHODS = ['OPTIONS', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'LINK', 'UNLINK'];
 
     public function add(string $method, string $url, array $fields = null, array $options = [])
@@ -108,13 +108,18 @@ class RequestCurl
         $argument = current($argument);
         if ($argument) {
             if (is_string($response) === true) {
-                switch ((string) $argument->getType()) {
-                    case 'array':
-                        $response = json_decode($response, true);
-                        break;
-                    case 'object':
-                        $response = json_decode($response);
-                        break;
+                $type = (string) $argument->getType();
+                # ------------------------------------
+                if ($type === 'array') {
+                    $response = json_decode($response, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        $response = [];
+                    }
+                } elseif ($type === 'object') {
+                    $response = json_decode($response);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        $response = (object) [];
+                    }
                 }
             }
             if ($function->hasReturnType()) {
