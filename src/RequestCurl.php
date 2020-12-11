@@ -11,11 +11,35 @@ class RequestCurl
     public $response = [];
     const METHODS = ['OPTIONS', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'LINK', 'UNLINK'];
 
+    public static function unparse_url($parsed_url)
+    {
+        $scheme = isset($parsed_url['scheme']) ? $parsed_url['scheme'] . '://' : '';
+        $host = isset($parsed_url['host']) ? $parsed_url['host'] : '';
+        $port = isset($parsed_url['port']) ? ':' . $parsed_url['port'] : '';
+        $user = isset($parsed_url['user']) ? $parsed_url['user'] : '';
+        $pass = isset($parsed_url['pass']) ? ':' . $parsed_url['pass'] : '';
+        $pass = ($user || $pass) ? "$pass@" : '';
+        $path = isset($parsed_url['path']) ? $parsed_url['path'] : '';
+        $query = isset($parsed_url['query']) ? '?' . $parsed_url['query'] : '';
+        $fragment = isset($parsed_url['fragment']) ? '#' . $parsed_url['fragment'] : '';
+        return "$scheme$user$pass$host$port$path$query$fragment";
+    }
+
     public function add(string $method, string $url, array $fields = null, array $options = [])
     {
         $method = strtoupper($method);
-        if ($fields && $method !== 'GET') {
-            $options[CURLOPT_POSTFIELDS] = $fields;
+        if (empty($fields) === false) {
+            if ($method !== 'GET') {
+                $options[CURLOPT_POSTFIELDS] = $fields;
+            } else {
+                $parsed_url = parse_url($url);
+                if (isset($parsed_url['query']) && empty($parsed_url['query']) === false) {
+                    parse_str($parsed_url['query'], $parsed_str);
+                    $fields = array_merge($parsed_str, $fields);
+                }
+                $parsed_url['query'] = http_build_query($fields);
+                $url = self::unparse_url($parsed_url);
+            }
         }
         $this->ch[$this->index] = curl_init();
         curl_setopt_array($this->ch[$this->index], $options + [
@@ -65,7 +89,11 @@ class RequestCurl
             } while ($active && $status == CURLM_OK);
             # ---------------------------------------
             for ($i = 0; $i < $this->index; $i++) {
-                $info = curl_getinfo($this->ch[$i]);
+                try {
+                    $info = curl_getinfo($this->ch[$i]);
+                } catch (\Throwable $th) {
+                    $info = [];
+                }
                 if (curl_errno($this->ch[$i]) === 0) {
                     $this->response[$i] = curl_multi_getcontent($this->ch[$i]);
                     if ($info['http_code'] >= 200 && $info['http_code'] < 300) {
@@ -83,7 +111,11 @@ class RequestCurl
             }
         } elseif ($this->index === 1) {
             $this->response[0] = curl_exec($this->ch[0]);
-            $info = curl_getinfo($this->ch[0]);
+            try {
+                $info = curl_getinfo($this->ch[0]);
+            } catch (\Throwable $th) {
+                $info = [];
+            }
             if (curl_errno($this->ch[0]) === 0) {
                 if ($info['http_code'] >= 200 && $info['http_code'] < 300) {
                     $this->promise('then', 0, $info);
@@ -106,7 +138,7 @@ class RequestCurl
         $function = new \ReflectionFunction($callback);
         $argument = $function->getParameters();
         $argument = current($argument);
-        if ($argument) {
+        if (isset($argument) === true) {
             if (is_string($response) === true) {
                 $type = (string) $argument->getType();
                 # ------------------------------------
@@ -122,11 +154,9 @@ class RequestCurl
                     }
                 }
             }
-            if ($function->hasReturnType()) {
-                $this->response[$index] = $callback($response, $info);
-            } else {
-                $callback($response, $info);
-            }
+        }
+        if ($function->hasReturnType()) {
+            $this->response[$index] = $callback($response, $info);
         } else {
             $callback($response, $info);
         }
