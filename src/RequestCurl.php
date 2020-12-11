@@ -133,25 +133,26 @@ class RequestCurl
     }
     private function promise(string $name, int $index, array $info = [], string $error = null)
     {
+        if (array_key_exists($index, $this->{$name}) === false) {
+            return false;
+        }
         $response = $this->response[$index] ?? '';
         $callback = $this->{$name}[$index] ?? function () {};
         $function = new \ReflectionFunction($callback);
         $argument = $function->getParameters();
         $argument = current($argument);
-        if (isset($argument) === true) {
-            if (is_string($response) === true) {
-                $type = (string) $argument->getType();
-                # ------------------------------------
-                if ($type === 'array') {
-                    $response = json_decode($response, true);
-                    if (json_last_error() !== JSON_ERROR_NONE) {
-                        $response = [];
-                    }
-                } elseif ($type === 'object') {
-                    $response = json_decode($response);
-                    if (json_last_error() !== JSON_ERROR_NONE) {
-                        $response = (object) [];
-                    }
+        if (isset($argument) === true && is_string($response) === true && $argument->hasType()) {
+            $type = (string) $argument->getType();
+            # ------------------------------------
+            if ($type === 'array') {
+                $response = json_decode($response, true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    $response = [];
+                }
+            } elseif ($type === 'object') {
+                $response = json_decode($response);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    $response = (object) [];
                 }
             }
         }
