@@ -25,12 +25,17 @@ class RequestCurl
         return "$scheme$user$pass$host$port$path$query$fragment";
     }
 
-    public function add(string $method, string $url, array $fields = null, array $options = [])
+    public function add(string $method, string $url, $fields = null, array $options = [])
     {
         $method = strtoupper($method);
         if (empty($fields) === false) {
             if ($method !== 'GET') {
-                $options[CURLOPT_POSTFIELDS] = http_build_query($fields);
+                if (is_object($fields)) {
+                    $fields = json_encode($fields);
+                } elseif (is_array($fields)) {
+                    $fields = http_build_query($fields);
+                }
+                $options[CURLOPT_POSTFIELDS] = $fields;
             } else {
                 $parsed_url = parse_url($url);
                 if (isset($parsed_url['query']) && empty($parsed_url['query']) === false) {
