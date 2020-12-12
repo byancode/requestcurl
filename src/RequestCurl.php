@@ -30,7 +30,7 @@ class RequestCurl
         $method = strtoupper($method);
         if (empty($fields) === false) {
             if ($method !== 'GET') {
-                $options[CURLOPT_POSTFIELDS] = $fields;
+                $options[CURLOPT_POSTFIELDS] = http_build_query($fields);
             } else {
                 $parsed_url = parse_url($url);
                 if (isset($parsed_url['query']) && empty($parsed_url['query']) === false) {
@@ -136,30 +136,50 @@ class RequestCurl
         if (array_key_exists($index, $this->{$name}) === false) {
             return false;
         }
-        $response = $this->response[$index] ?? '';
-        $callback = $this->{$name}[$index] ?? function () {};
+        $callback = $this->{$name}[$index];
+        $response = $this->response[$index];
         $function = new \ReflectionFunction($callback);
         $argument = $function->getParameters();
-        $argument = current($argument);
-        if (isset($argument) === true && is_string($response) === true && $argument->hasType()) {
+        [$argument] = $function->getParameters() + [null];
+        if (isset($argument) === true && $argument->hasType()) {
             $type = (string) $argument->getType();
             # ------------------------------------
-            if ($type === 'array') {
-                $response = json_decode($response, true);
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    $response = [];
+            if (is_string($response) === true) {
+                if ($type === 'array') {
+                    $response = json_decode($response, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        $response = [];
+                    }
+                } elseif ($type === 'object') {
+                    $response = json_decode($response);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        $response = (object) [];
+                    }
+                } else {
+                    $response = call_user_func("{$type}val", $response);
                 }
-            } elseif ($type === 'object') {
-                $response = json_decode($response);
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    $response = (object) [];
+            } elseif (is_array($response) === true) {
+                if ($type === 'string') {
+                    $response = json_encode($response);
+                } elseif ($type === 'object') {
+                    $response = (object) $response;
+                } else {
+                    $response = call_user_func("{$type}val", $response);
+                }
+            } elseif (is_object($response) === true) {
+                if ($type === 'string') {
+                    $response = json_encode($response);
+                } elseif ($type === 'array') {
+                    $response = (array) $response;
+                } else {
+                    $response = call_user_func("{$type}val", $response);
                 }
             }
         }
         if ($function->hasReturnType()) {
-            $this->response[$index] = $callback($response, $info);
+            $this->response[$index] = $callback($response, $info, $error);
         } else {
-            $callback($response, $info);
+            $callback($response, $info, $error);
         }
     }
     public function __call($name, $arguments)
