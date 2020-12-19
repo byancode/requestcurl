@@ -3,8 +3,6 @@ include './src/RequestCurl.php';
 
 $request = new \Byancode\RequestCurl();
 
-echo boolval([]);
-exit;
 $request
     ->get('https://restcountries.eu/rest/v2/currency/97t', [
         'hola' => 'yes',

@@ -147,7 +147,7 @@ class RequestCurl
         $argument = $function->getParameters();
         [$argument] = $function->getParameters() + [null];
         if (isset($argument) === true && $argument->hasType()) {
-            $type = (string) $argument->getType();
+            $type = (string) ($argument->getType() ? $argument->getType()->getName() : null);
             # ------------------------------------
             if (is_string($response) === true) {
                 if ($type === 'array') {
