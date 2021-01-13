@@ -47,7 +47,7 @@ class RequestCurl
     }
     public static function withHeaders(array $headers)
     {
-        return new self($headers);
+        return (new self())->headers($headers);
     }
     public static function isolate(callable $callbackWithIsolate)
     {
@@ -57,9 +57,21 @@ class RequestCurl
         static::disableIsolate();
     }
 
-    public function __construct(array $headers = [])
+    public function headers(array $headers = [])
     {
-        $this->headers = [];
+        foreach ($headers as $key => $value) {
+            $this->headers[$key] = $value;
+        }
+        return $this;
+    }
+
+    protected function headerList()
+    {
+        $result = [];
+        foreach ($this->headers as $key => $value) {
+            $result[] = "$key: $value";
+        }
+        return $result;
     }
 
     public function index()
@@ -164,9 +176,9 @@ class RequestCurl
         }
         if (count($this->headers) > 0) {
             if (isset($options[CURLOPT_HTTPHEADER])) {
-                $options[CURLOPT_HTTPHEADER] = $this->headers + $options[CURLOPT_HTTPHEADER];
+                $options[CURLOPT_HTTPHEADER] = array_merge($this->headerList(), $options[CURLOPT_HTTPHEADER]);
             } else {
-                $options[CURLOPT_HTTPHEADER] = $this->headers;
+                $options[CURLOPT_HTTPHEADER] = $this->headerList();
             }
         }
         $this->insertCurl($options + [
@@ -344,6 +356,7 @@ class RequestCurl
     }
     public function __destruct()
     {
+        $this->headers = [];
         $this->noStaticCurl = [
             'curl' => [],
             'index' => 0,
