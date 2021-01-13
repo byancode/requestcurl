@@ -5,6 +5,7 @@ class RequestCurl
 {
     const METHODS = ['OPTIONS', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'LINK', 'UNLINK'];
 
+    protected $headers = [];
     protected $noStaticCurl = [
         'curl' => [],
         'index' => 0,
@@ -44,12 +45,21 @@ class RequestCurl
             'response' => [],
         ];
     }
+    public static function withHeaders(array $headers)
+    {
+        return new self($headers);
+    }
     public static function isolate(callable $callbackWithIsolate)
     {
         static::enableIsolate();
         $callbackWithIsolate();
         (new self())->execute(true);
         static::disableIsolate();
+    }
+
+    public function __construct(array $headers = [])
+    {
+        $this->headers = [];
     }
 
     public function index()
@@ -150,6 +160,13 @@ class RequestCurl
                 }
                 $parsed_url['query'] = http_build_query($fields);
                 $url = self::unparse_url($parsed_url);
+            }
+        }
+        if (count($this->headers) > 0) {
+            if (isset($options[CURLOPT_HTTPHEADER])) {
+                $options[CURLOPT_HTTPHEADER] = $this->headers + $options[CURLOPT_HTTPHEADER];
+            } else {
+                $options[CURLOPT_HTTPHEADER] = $this->headers;
             }
         }
         $this->insertCurl($options + [
