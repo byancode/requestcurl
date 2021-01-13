@@ -28,9 +28,10 @@ class RequestCurl
     {
         static::$isIsolate = true;
     }
-    public static function disableIsolate(bool $restore = true)
+    public static function disableIsolate()
     {
         static::$isIsolate = false;
+        static::restoreIsolate();
     }
     public static function restoreIsolate()
     {
@@ -49,7 +50,6 @@ class RequestCurl
         $callbackWithIsolate();
         (new self())->execute(true);
         static::disableIsolate();
-        static::restoreIsolate();
     }
 
     public function index()
