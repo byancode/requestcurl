@@ -3,13 +3,119 @@ namespace Byancode;
 
 class RequestCurl
 {
-    public $ch = [];
-    public $index = 0;
-    private $then = [];
-    private $catch = [];
-    private $finally = [];
-    public $response = [];
     const METHODS = ['OPTIONS', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'LINK', 'UNLINK'];
+
+    protected $noStaticCurl = [
+        'curl' => [],
+        'index' => 0,
+        'then' => [],
+        'catch' => [],
+        'finally' => [],
+        'response' => [],
+    ];
+    protected static $staticCurl = [
+        'curl' => [],
+        'index' => 0,
+        'then' => [],
+        'catch' => [],
+        'finally' => [],
+        'response' => [],
+    ];
+
+    public static $isIsolate = false;
+
+    public static function enableIsolate()
+    {
+        static::$isIsolate = true;
+    }
+    public static function disableIsolate(bool $restore = true)
+    {
+        static::$isIsolate = false;
+    }
+    public static function restoreIsolate()
+    {
+        static::$staticCurl = [
+            'curl' => [],
+            'index' => 0,
+            'then' => [],
+            'catch' => [],
+            'finally' => [],
+            'response' => [],
+        ];
+    }
+    public static function isolate(callable $callbackWithIsolate)
+    {
+        static::enableIsolate();
+        $callbackWithIsolate();
+        (new self())->execute(true);
+        static::disableIsolate();
+        static::restoreIsolate();
+    }
+
+    public function index()
+    {
+        return static::$isIsolate ? static::$staticCurl['index'] : $this->noStaticCurl['index'];
+    }
+    public function increment()
+    {
+        if (static::$isIsolate === true) {
+            static::$staticCurl['index']++;
+        } else {
+            $this->noStaticCurl['index']++;
+        }
+    }
+    public function curl(int $index = null)
+    {
+        if (static::$isIsolate === true) {
+            return static::$staticCurl['curl'][$index ?? static::$staticCurl['index']];
+        } else {
+            return $this->noStaticCurl['curl'][$index ?? $this->noStaticCurl['index']];
+        }
+    }
+    public function insertCurl(array $options)
+    {
+        if (static::$isIsolate) {
+            static::$staticCurl['curl'][static::$staticCurl['index']] = curl_init();
+            curl_setopt_array(static::$staticCurl['curl'][static::$staticCurl['index']], $options);
+            static::$staticCurl['index']++;
+        } else {
+            $this->noStaticCurl['curl'][$this->noStaticCurl['index']] = curl_init();
+            curl_setopt_array($this->noStaticCurl['curl'][$this->noStaticCurl['index']], $options);
+            $this->noStaticCurl['index']++;
+        }
+    }
+    public function value(string $key)
+    {
+        if (static::$isIsolate === true) {
+            return static::$staticCurl[$key];
+        } else {
+            return $this->noStaticCurl[$key];
+        }
+    }
+    public function arrayValue(string $key, int $index)
+    {
+        if (static::$isIsolate === true) {
+            return static::$staticCurl[$key][$index];
+        } else {
+            return $this->noStaticCurl[$key][$index];
+        }
+    }
+    public function variable(string $key, $value)
+    {
+        if (static::$isIsolate === true) {
+            return static::$staticCurl[$key] = $value;
+        } else {
+            return $this->noStaticCurl[$key] = $value;
+        }
+    }
+    public function promiseCaller(string $key, $value)
+    {
+        if (static::$isIsolate === true) {
+            static::$staticCurl[$key][static::$staticCurl['index'] - 1] = $value;
+        } else {
+            $this->noStaticCurl[$key][$this->noStaticCurl['index'] - 1] = $value;
+        }
+    }
 
     public static function unparse_url($parsed_url)
     {
@@ -46,8 +152,7 @@ class RequestCurl
                 $url = self::unparse_url($parsed_url);
             }
         }
-        $this->ch[$this->index] = curl_init();
-        curl_setopt_array($this->ch[$this->index], $options + [
+        $this->insertCurl($options + [
             CURLOPT_URL => $url,
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_FOLLOWLOCATION => true,
@@ -58,32 +163,46 @@ class RequestCurl
             CURLOPT_VERBOSE => 0,
             CURLOPT_HTTPHEADER => [],
         ]);
-        $this->index++;
         return $this;
     }
     public function then(callable $callback)
     {
-        $this->then[$this->index - 1] = $callback;
+        $this->promiseCaller('then', $callback);
         return $this;
     }
     function catch (callable $callback) {
-        $this->catch[$this->index - 1] = $callback;
+        $this->promiseCaller('catch', $callback);
         return $this;
     }
     function finally (callable $callback) {
-        $this->finally[$this->index - 1] = $callback;
+        $this->promiseCaller('finally', $callback);
         return $this;
     }
     public function response(int $index = null)
     {
-        return isset($index) ? $this->response[$index] : $this->response;
+        if (static::$isIsolate === true) {
+            return isset($index) ? static::$staticCurl['response'][$index] : static::$staticCurl['response'];
+        } else {
+            return isset($index) ? $this->noStaticCurl['response'][$index] : $this->noStaticCurl['response'];
+        }
     }
-    public function execute()
+    public function responseValue(int $index, $value)
     {
-        if ($this->index > 1) {
+        if (static::$isIsolate === true) {
+            static::$staticCurl['response'][$index] = $value;
+        } else {
+            $this->noStaticCurl['response'][$index] = $value;
+        }
+    }
+    public function execute(bool $force = false)
+    {
+        if (static::$isIsolate && !$force) {
+            return;
+        }
+        if ($this->index() > 1) {
             $mh = curl_multi_init();
-            for ($i = 0; $i < $this->index; $i++) {
-                curl_multi_add_handle($mh, $this->ch[$i]);
+            for ($i = 0; $i < $this->index(); $i++) {
+                curl_multi_add_handle($mh, $this->curl($i));
             }
             # ---------------------------------------
             do {
@@ -93,56 +212,56 @@ class RequestCurl
                 }
             } while ($active && $status == CURLM_OK);
             # ---------------------------------------
-            for ($i = 0; $i < $this->index; $i++) {
+            for ($i = 0; $i < $this->index(); $i++) {
                 try {
-                    $info = curl_getinfo($this->ch[$i]);
+                    $info = curl_getinfo($this->curl($i));
                 } catch (\Throwable $th) {
                     $info = [];
                 }
-                if (curl_errno($this->ch[$i]) === 0) {
-                    $this->response[$i] = curl_multi_getcontent($this->ch[$i]);
+                if (curl_errno($this->curl($i)) === 0) {
+                    $this->responseValue($i, curl_multi_getcontent($this->curl($i)));
                     if ($info['http_code'] >= 200 && $info['http_code'] < 300) {
                         $this->promise('then', $i, $info);
                     } else {
                         $this->promise('catch', $i, $info);
                     }
                 } else {
-                    $error = curl_error($this->ch[$i]);
+                    $error = curl_error($this->curl($i));
                     $this->promise('catch', $i, $info, $error);
                 }
                 $this->promise('finally', $i, $info);
-                curl_multi_remove_handle($mh, $this->ch[$i]);
-                curl_close($this->ch[$i]);
+                curl_multi_remove_handle($mh, $this->curl($i));
+                curl_close($this->curl($i));
             }
-        } elseif ($this->index === 1) {
-            $this->response[0] = curl_exec($this->ch[0]);
+        } elseif ($this->index() === 1) {
+            $this->responseValue(0, curl_exec($this->curl(0)));
             try {
-                $info = curl_getinfo($this->ch[0]);
+                $info = curl_getinfo($this->curl(0));
             } catch (\Throwable $th) {
                 $info = [];
             }
-            if (curl_errno($this->ch[0]) === 0) {
+            if (curl_errno($this->curl(0)) === 0) {
                 if ($info['http_code'] >= 200 && $info['http_code'] < 300) {
                     $this->promise('then', 0, $info);
                 } else {
                     $this->promise('catch', 0, $info);
                 }
             } else {
-                $error = curl_error($this->ch[0]);
+                $error = curl_error($this->curl(0));
                 $this->promise('catch', 0, $info, $error);
             }
             $this->promise('finally', 0, $info);
-            curl_close($this->ch[0]);
+            curl_close($this->curl(0));
         }
         return $this;
     }
     private function promise(string $name, int $index, array $info = [], string $error = null)
     {
-        if (array_key_exists($index, $this->{$name}) === false) {
+        if (array_key_exists($index, $this->value($name)) === false) {
             return false;
         }
-        $callback = $this->{$name}[$index];
-        $response = $this->response[$index];
+        $callback = $this->arrayValue($name, $index);
+        $response = $this->response($index);
         $function = new \ReflectionFunction($callback);
         $argument = $function->getParameters();
         [$argument] = $function->getParameters() + [null];
@@ -182,7 +301,7 @@ class RequestCurl
             }
         }
         if ($function->hasReturnType()) {
-            $this->response[$index] = $callback($response, $info, $error);
+            $this->responseValue($index, $callback($response, $info, $error));
         } else {
             $callback($response, $info, $error);
         }
@@ -208,7 +327,13 @@ class RequestCurl
     }
     public function __destruct()
     {
-        $this->index = 0;
-        $this->response = $this->then = $this->catch = $this->finally = $this->ch = [];
+        $this->noStaticCurl = [
+            'curl' => [],
+            'index' => 0,
+            'then' => [],
+            'catch' => [],
+            'finally' => [],
+            'response' => [],
+        ];
     }
 }
