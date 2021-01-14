@@ -23,8 +23,12 @@ class RequestCurl
         'response' => [],
     ];
 
+    public static $logger;
     public static $isIsolate = false;
-
+    public static function report(callable $callback)
+    {
+        self::$logger = $callback;
+    }
     public static function enableIsolate()
     {
         static::$isIsolate = true;
@@ -332,6 +336,7 @@ class RequestCurl
         try {
             $response = $callback($response, $info, $error);
         } catch (\Throwable $th) {
+            self::$logger && call_user_func(self::$logger, $th);
             return;
         }
         if ($function->hasReturnType()) {
