@@ -329,10 +329,13 @@ class RequestCurl
                 }
             }
         }
+        try {
+            $response = $callback($response, $info, $error);
+        } catch (\Throwable $th) {
+            return;
+        }
         if ($function->hasReturnType()) {
-            $this->responseValue($index, $callback($response, $info, $error));
-        } else {
-            $callback($response, $info, $error);
+            $this->responseValue($index, $response);
         }
     }
     public function __call($name, $arguments)
