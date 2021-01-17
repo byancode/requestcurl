@@ -4,7 +4,7 @@ namespace Byancode;
 class RequestCurl
 {
     const METHODS = ['OPTIONS', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'LINK', 'UNLINK'];
-
+    protected $executed = false;
     protected $headers = [];
     protected $noStaticCurl = [
         'curl' => [],
@@ -13,6 +13,7 @@ class RequestCurl
         'catch' => [],
         'finally' => [],
         'response' => [],
+        'onloaded' => null,
     ];
     protected static $staticCurl = [
         'curl' => [],
@@ -21,6 +22,7 @@ class RequestCurl
         'catch' => [],
         'finally' => [],
         'response' => [],
+        'onloaded' => null,
     ];
 
     public static $logger;
@@ -49,6 +51,21 @@ class RequestCurl
             'response' => [],
         ];
     }
+    public function __construct()
+    {
+        $filtered = array_filter(
+            debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS),
+            [$this, 'find_parent_isolate']
+        );
+    }
+    public function find_parent_isolate(array $trace)
+    {
+        return isset($trace['class']) &&
+        isset($trace['function']) &&
+        $trace['class'] === __CLASS__ &&
+            $trace['function'] === '__construct';
+    }
+
     public static function withHeaders(array $headers)
     {
         return (new self())->headers($headers);
@@ -211,6 +228,26 @@ class RequestCurl
         $this->promiseCaller('finally', $callback);
         return $this;
     }
+    private function loadedTrigger()
+    {
+        if (static::$isIsolate === true) {
+            $callback = static::$staticCurl['onloaded'];
+        } else {
+            $callback = $this->noStaticCurl['onloaded'];
+        }
+        if (isset($callback) === true) {
+            $callback(static::$isIsolate ? static::$staticCurl['response'] : $this->noStaticCurl['response']);
+        }
+    }
+    public function loaded(callable $callback)
+    {
+        if (static::$isIsolate === true) {
+            static::$staticCurl['onloaded'] = $callback;
+        } else {
+            $this->noStaticCurl['onloaded'] = $callback;
+        }
+        return $this;
+    }
     public function response(int $index = null)
     {
         if (static::$isIsolate === true) {
@@ -232,6 +269,7 @@ class RequestCurl
         if (static::$isIsolate && !$force) {
             return;
         }
+        $this->executed = true;
         if ($this->index() > 1) {
             $mh = curl_multi_init();
             for ($i = 0; $i < $this->index(); $i++) {
@@ -266,6 +304,7 @@ class RequestCurl
                 curl_multi_remove_handle($mh, $this->curl($i));
                 curl_close($this->curl($i));
             }
+            $this->loadedTrigger();
         } elseif ($this->index() === 1) {
             $this->responseValue(0, curl_exec($this->curl(0)));
             try {
@@ -285,6 +324,7 @@ class RequestCurl
             }
             $this->promise('finally', 0, $info);
             curl_close($this->curl(0));
+            $this->loadedTrigger();
         }
         return $this;
     }
@@ -364,6 +404,9 @@ class RequestCurl
     }
     public function __destruct()
     {
+        if (!static::$isIsolate && !$this->executed) {
+            $this->execute();
+        }
         $this->headers = [];
         $this->noStaticCurl = [
             'curl' => [],

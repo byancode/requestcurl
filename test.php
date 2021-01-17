@@ -3,7 +3,7 @@ include './src/RequestCurl.php';
 
 use Byancode\RequestCurl;
 
-RequestCurl::isolate(function () {
+RequestCurl::trace(function () {
     $request = new RequestCurl();
     $request
         ->get('https://restcountries.eu/rest/v2/currency/97t', [
@@ -24,6 +24,17 @@ RequestCurl::isolate(function () {
             return $response->message;
         })
         ->finally(function ($name) {
+
+            $request = new RequestCurl();
+            $request
+                ->get('https://restcountries.eu/rest/v2/currency/pen')
+                ->then(function (array $response): string {
+                    return $response[0]['name'];
+                })
+                ->finally(function ($name) {
+                    echo '2 ' . $name . PHP_EOL;
+                });
+            $request->execute();
             echo '1 ' . $name . PHP_EOL;
             echo 'Se finalizo con la palabra: ' . $name . PHP_EOL;
         });
