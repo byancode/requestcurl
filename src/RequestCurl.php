@@ -327,11 +327,6 @@ class RequestCurl
                 }
             }
         }
-        if ($function->hasReturnType()) {
-            $this->response[$index] = $callback($response, $info, $error);
-        } else {
-            $callback($response, $info, $error);
-        }
 
         try {
             $response = $callback($response, $info, $error);
