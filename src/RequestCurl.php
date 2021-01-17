@@ -332,6 +332,16 @@ class RequestCurl
         } else {
             $callback($response, $info, $error);
         }
+
+        try {
+            $response = $callback($response, $info, $error);
+        } catch (\Throwable $th) {
+            self::$logger && call_user_func(self::$logger, $th);
+            return;
+        }
+        if ($function->hasReturnType()) {
+            $this->response[$index] = $response;
+        }
     }
     public function __call($name, $arguments)
     {
