@@ -170,6 +170,13 @@ class RequestCurl
                 $url = self::unparse_url($parsed_url);
             }
         }
+        if (count($this->headers) > 0) {
+            if (isset($options[CURLOPT_HTTPHEADER])) {
+                $options[CURLOPT_HTTPHEADER] = array_merge($this->headerList(), $options[CURLOPT_HTTPHEADER]);
+            } else {
+                $options[CURLOPT_HTTPHEADER] = $this->headerList();
+            }
+        }
         $curl = curl_init();
         curl_setopt_array($curl, $options + [
             CURLOPT_URL => $url,
@@ -277,7 +284,6 @@ class RequestCurl
     }
     public function promise(string $event, int $index, array $info = [], string $error = null)
     {
-        $isLoaded = $event === 'finally' && $index + 1 === $this->index;
         if (array_key_exists($index, $this->{$event}) === false) {
             return false;
         }

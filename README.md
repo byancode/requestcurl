@@ -1,16 +1,16 @@
-# Asynchronous Multi Curl
+# Sync multi CURL deep recursive
 
 ## Installation
 
 You can install the package via composer:
 
-```bash
+``` bash
 composer require byancode/requestcurl
 ```
 
 ## Usage
 
-```php
+``` php
 /***************************************************************************************
 @param string   $method   = OPTIONS, GET, POST, PUT, PATCH, DELETE, HEAD, LINK, UNLINK
 @param string   $url      = https://...
@@ -27,7 +27,7 @@ $request->get(...)->finally(string|array|object $response, array $request_info)
 
 ## Usage 2
 
-```php
+``` php
 # return string response
 $request->get(...)->then(function($data) {
     if (gettype($data) === 'string') {
@@ -40,7 +40,6 @@ $request->get(...)->then(function($data) {
 });
 # ----------
 # output: si
-
 
 # return response converted in array
 $request->get(...)->then(function(array $data) {
@@ -74,7 +73,7 @@ $request->get(...)->then(function(object $data) {
 
 ## Example 1
 
-```php
+``` php
 $request = new \Byancode\RequestCurl();
 
 for ($i=0; $i < 16; $i++) {
@@ -100,7 +99,7 @@ $request->execute();
 
 ## Example 2
 
-```php
+``` php
 $request = new \Byancode\RequestCurl();
 
 $request->add('GET', 'https://restcountries.eu/rest/v2/currency/cop')->then(function(array $response): string {
