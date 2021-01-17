@@ -1,81 +1,135 @@
 <?php
 namespace Byancode;
 
+use ReflectionFunction;
+use Throwable;
+
 class RequestCurl
 {
-    const METHODS = ['OPTIONS', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'LINK', 'UNLINK'];
-    protected $executed = false;
-    protected $headers = [];
-    protected $noStaticCurl = [
-        'curl' => [],
-        'index' => 0,
-        'then' => [],
-        'catch' => [],
-        'finally' => [],
-        'response' => [],
-        'onloaded' => null,
-    ];
-    protected static $staticCurl = [
-        'curl' => [],
-        'index' => 0,
-        'then' => [],
-        'catch' => [],
-        'finally' => [],
-        'response' => [],
-        'onloaded' => null,
+    const METHODS = [
+        'OPTIONS',
+        'UNLINK',
+        'DELETE',
+        'PATCH',
+        'POST',
+        'HEAD',
+        'LINK',
+        'GET',
+        'PUT',
     ];
 
+    private $alone;
+    private $ch = [];
+    private $loaded;
+    private $index = 0;
+    private $then = [];
+    private $catch = [];
+    private $finally = [];
+    public $response = [];
+    private $tracked = false;
+    protected $executed = false;
+
     public static $logger;
-    public static $isIsolate = false;
+    public static $pending = [];
+    public static $tracing = false;
+
     public static function report(callable $callback)
     {
         self::$logger = $callback;
     }
-    public static function enableIsolate()
+
+    public static function http(bool $alone = false)
     {
-        static::$isIsolate = true;
+        return new static($alone);
     }
-    public static function disableIsolate()
+
+    public static function trace(callable $callback)
     {
-        static::$isIsolate = false;
-        static::restoreIsolate();
+        static::enableTrace();
+        $callback();
+        static::disableTrace();
     }
-    public static function restoreIsolate()
+
+    public static function handler()
     {
-        static::$staticCurl = [
-            'curl' => [],
-            'index' => 0,
-            'then' => [],
-            'catch' => [],
-            'finally' => [],
-            'response' => [],
-        ];
+        while (true) {
+            $list = static::$pending;
+
+            if (count($list) === 0) {
+                break;
+            }
+
+            static::$pending = [];
+
+            $temp = new static(true);
+
+            foreach ($list as $instance) {
+                $temp->import($instance);
+            }
+
+            $temp->execute();
+
+            foreach ($list as $instance) {
+                $instance->trigger();
+            }
+        }
     }
-    public function __construct()
+
+    public static function enableTrace()
     {
-        $filtered = array_filter(
-            debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS),
-            [$this, 'find_parent_isolate']
-        );
+        static::$tracing = true;
     }
-    public function find_parent_isolate(array $trace)
+
+    public static function disableTrace()
     {
-        return isset($trace['class']) &&
-        isset($trace['function']) &&
-        $trace['class'] === __CLASS__ &&
-            $trace['function'] === '__construct';
+        self::handler();
+        static::$tracing = false;
     }
 
     public static function withHeaders(array $headers)
     {
         return (new self())->headers($headers);
     }
-    public static function isolate(callable $callbackWithIsolate)
+
+    public function __construct(bool $alone = false)
     {
-        static::enableIsolate();
-        $callbackWithIsolate();
-        (new self())->execute(true);
-        static::disableIsolate();
+        $this->tracked = static::$tracing;
+        if (static::$tracing && !$alone) {
+            self::$pending[] = $this;
+        }
+        $this->alone = $alone;
+    }
+
+    public function get_deep_trace(array $trace)
+    {
+        return isset($trace['class']) && isset($trace['function']) &&
+        $trace['class'] === __CLASS__ && $trace['function'] === '__construct';
+    }
+
+    public static function unparse_url($parsed_url)
+    {
+        $scheme = isset($parsed_url['scheme']) ? $parsed_url['scheme'] . '://' : '';
+        $host = isset($parsed_url['host']) ? $parsed_url['host'] : '';
+        $port = isset($parsed_url['port']) ? ':' . $parsed_url['port'] : '';
+        $user = isset($parsed_url['user']) ? $parsed_url['user'] : '';
+        $pass = isset($parsed_url['pass']) ? ':' . $parsed_url['pass'] : '';
+        $pass = ($user || $pass) ? "$pass@" : '';
+        $path = isset($parsed_url['path']) ? $parsed_url['path'] : '';
+        $query = isset($parsed_url['query']) ? '?' . $parsed_url['query'] : '';
+        $fragment = isset($parsed_url['fragment']) ? '#' . $parsed_url['fragment'] : '';
+        return "$scheme$user$pass$host$port$path$query$fragment";
+    }
+
+    public function export()
+    {
+        return $this->ch;
+    }
+
+    public function import($instance)
+    {
+        $this->ch = array_merge($this->ch, $instance->export());
+        $this->index = count($this->ch);
+        return $this;
     }
 
     public function headers(array $headers = [])
@@ -93,85 +147,6 @@ class RequestCurl
             $result[] = "$key: $value";
         }
         return $result;
-    }
-
-    public function index()
-    {
-        return static::$isIsolate ? static::$staticCurl['index'] : $this->noStaticCurl['index'];
-    }
-    public function increment()
-    {
-        if (static::$isIsolate === true) {
-            static::$staticCurl['index']++;
-        } else {
-            $this->noStaticCurl['index']++;
-        }
-    }
-    public function curl(int $index = null)
-    {
-        if (static::$isIsolate === true) {
-            return static::$staticCurl['curl'][$index ?? static::$staticCurl['index']];
-        } else {
-            return $this->noStaticCurl['curl'][$index ?? $this->noStaticCurl['index']];
-        }
-    }
-    public function insertCurl(array $options)
-    {
-        if (static::$isIsolate) {
-            static::$staticCurl['curl'][static::$staticCurl['index']] = curl_init();
-            curl_setopt_array(static::$staticCurl['curl'][static::$staticCurl['index']], $options);
-            static::$staticCurl['index']++;
-        } else {
-            $this->noStaticCurl['curl'][$this->noStaticCurl['index']] = curl_init();
-            curl_setopt_array($this->noStaticCurl['curl'][$this->noStaticCurl['index']], $options);
-            $this->noStaticCurl['index']++;
-        }
-    }
-    public function value(string $key)
-    {
-        if (static::$isIsolate === true) {
-            return static::$staticCurl[$key];
-        } else {
-            return $this->noStaticCurl[$key];
-        }
-    }
-    public function arrayValue(string $key, int $index)
-    {
-        if (static::$isIsolate === true) {
-            return static::$staticCurl[$key][$index];
-        } else {
-            return $this->noStaticCurl[$key][$index];
-        }
-    }
-    public function variable(string $key, $value)
-    {
-        if (static::$isIsolate === true) {
-            return static::$staticCurl[$key] = $value;
-        } else {
-            return $this->noStaticCurl[$key] = $value;
-        }
-    }
-    public function promiseCaller(string $key, $value)
-    {
-        if (static::$isIsolate === true) {
-            static::$staticCurl[$key][static::$staticCurl['index'] - 1] = $value;
-        } else {
-            $this->noStaticCurl[$key][$this->noStaticCurl['index'] - 1] = $value;
-        }
-    }
-
-    public static function unparse_url($parsed_url)
-    {
-        $scheme = isset($parsed_url['scheme']) ? $parsed_url['scheme'] . '://' : '';
-        $host = isset($parsed_url['host']) ? $parsed_url['host'] : '';
-        $port = isset($parsed_url['port']) ? ':' . $parsed_url['port'] : '';
-        $user = isset($parsed_url['user']) ? $parsed_url['user'] : '';
-        $pass = isset($parsed_url['pass']) ? ':' . $parsed_url['pass'] : '';
-        $pass = ($user || $pass) ? "$pass@" : '';
-        $path = isset($parsed_url['path']) ? $parsed_url['path'] : '';
-        $query = isset($parsed_url['query']) ? '?' . $parsed_url['query'] : '';
-        $fragment = isset($parsed_url['fragment']) ? '#' . $parsed_url['fragment'] : '';
-        return "$scheme$user$pass$host$port$path$query$fragment";
     }
 
     public function add(string $method, string $url, $fields = null, array $options = [])
@@ -195,14 +170,8 @@ class RequestCurl
                 $url = self::unparse_url($parsed_url);
             }
         }
-        if (count($this->headers) > 0) {
-            if (isset($options[CURLOPT_HTTPHEADER])) {
-                $options[CURLOPT_HTTPHEADER] = array_merge($this->headerList(), $options[CURLOPT_HTTPHEADER]);
-            } else {
-                $options[CURLOPT_HTTPHEADER] = $this->headerList();
-            }
-        }
-        $this->insertCurl($options + [
+        $curl = curl_init();
+        curl_setopt_array($curl, $options + [
             CURLOPT_URL => $url,
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_FOLLOWLOCATION => true,
@@ -213,67 +182,49 @@ class RequestCurl
             CURLOPT_VERBOSE => 0,
             CURLOPT_HTTPHEADER => [],
         ]);
+        $this->ch[$this->index] = [$curl, $this, $this->index];
+        $this->index++;
         return $this;
     }
     public function then(callable $callback)
     {
-        $this->promiseCaller('then', $callback);
+        $this->then[$this->index - 1] = $callback;
         return $this;
     }
     function catch (callable $callback) {
-        $this->promiseCaller('catch', $callback);
+        $this->catch[$this->index - 1] = $callback;
         return $this;
     }
     function finally (callable $callback) {
-        $this->promiseCaller('finally', $callback);
-        return $this;
-    }
-    private function loadedTrigger()
-    {
-        if (static::$isIsolate === true) {
-            $callback = static::$staticCurl['onloaded'];
-        } else {
-            $callback = $this->noStaticCurl['onloaded'];
-        }
-        if (isset($callback) === true) {
-            $callback(static::$isIsolate ? static::$staticCurl['response'] : $this->noStaticCurl['response']);
-        }
-    }
-    public function loaded(callable $callback)
-    {
-        if (static::$isIsolate === true) {
-            static::$staticCurl['onloaded'] = $callback;
-        } else {
-            $this->noStaticCurl['onloaded'] = $callback;
-        }
+        $this->finally[$this->index - 1] = $callback;
         return $this;
     }
     public function response(int $index = null)
     {
-        if (static::$isIsolate === true) {
-            return isset($index) ? static::$staticCurl['response'][$index] : static::$staticCurl['response'];
-        } else {
-            return isset($index) ? $this->noStaticCurl['response'][$index] : $this->noStaticCurl['response'];
-        }
+        return isset($index) ? $this->response[$index] : $this->response;
     }
-    public function responseValue(int $index, $value)
+    public function trigger()
     {
-        if (static::$isIsolate === true) {
-            static::$staticCurl['response'][$index] = $value;
-        } else {
-            $this->noStaticCurl['response'][$index] = $value;
-        }
+        $this->loaded && call_user_func($this->loaded, $this->response);
     }
-    public function execute(bool $force = false)
+    public function loaded(callable $callback)
     {
-        if (static::$isIsolate && !$force) {
-            return;
-        }
+        $this->loaded = $callback;
+        return $this;
+    }
+    public function execute()
+    {
         $this->executed = true;
-        if ($this->index() > 1) {
+        # -------------------------------------------
+        if ($this->tracked && !$this->alone) {
+            return $this;
+        }
+        # -------------------------------------------
+        if ($this->index > 1) {
             $mh = curl_multi_init();
-            for ($i = 0; $i < $this->index(); $i++) {
-                curl_multi_add_handle($mh, $this->curl($i));
+            # ---------------------------------------
+            foreach ($this->ch as [$ch, $instance, $index]) {
+                curl_multi_add_handle($mh, $ch);
             }
             # ---------------------------------------
             do {
@@ -283,59 +234,56 @@ class RequestCurl
                 }
             } while ($active && $status == CURLM_OK);
             # ---------------------------------------
-            for ($i = 0; $i < $this->index(); $i++) {
+            foreach ($this->ch as [$ch, $instance, $index]) {
                 try {
-                    $info = curl_getinfo($this->curl($i));
-                } catch (\Throwable $th) {
+                    $info = curl_getinfo($ch);
+                } catch (Throwable $th) {
                     $info = [];
                 }
-                if (curl_errno($this->curl($i)) === 0) {
-                    $this->responseValue($i, curl_multi_getcontent($this->curl($i)));
+                if (curl_errno($ch) === 0) {
+                    $instance->response[$index] = curl_multi_getcontent($ch);
                     if ($info['http_code'] >= 200 && $info['http_code'] < 300) {
-                        $this->promise('then', $i, $info);
+                        $instance->promise('then', $index, $info);
                     } else {
-                        $this->promise('catch', $i, $info);
+                        $instance->promise('catch', $index, $info);
                     }
                 } else {
-                    $error = curl_error($this->curl($i));
-                    $this->promise('catch', $i, $info, $error);
+                    $error = curl_error($ch);
+                    $instance->promise('catch', $index, $info, $error);
                 }
-                $this->promise('finally', $i, $info);
-                curl_multi_remove_handle($mh, $this->curl($i));
-                curl_close($this->curl($i));
+                $instance->promise('finally', $index, $info);
+                curl_multi_remove_handle($mh, $ch);
+                curl_close($ch);
             }
-            $this->loadedTrigger();
-        } elseif ($this->index() === 1) {
-            $this->responseValue(0, curl_exec($this->curl(0)));
-            try {
-                $info = curl_getinfo($this->curl(0));
-            } catch (\Throwable $th) {
-                $info = [];
-            }
-            if (curl_errno($this->curl(0)) === 0) {
+        } elseif ($this->index === 1) {
+            [$ch, $instance, $index] = current($this->ch);
+            $instance->response[$index] = curl_exec($ch);
+            if (curl_errno($ch) === 0) {
+                $info = curl_getinfo($ch);
                 if ($info['http_code'] >= 200 && $info['http_code'] < 300) {
-                    $this->promise('then', 0, $info);
+                    $instance->promise('then', $index, $info);
                 } else {
-                    $this->promise('catch', 0, $info);
+                    $instance->promise('catch', $index, $info);
                 }
             } else {
-                $error = curl_error($this->curl(0));
-                $this->promise('catch', 0, $info, $error);
+                $info = [];
+                $error = curl_error($ch);
+                $instance->promise('catch', $index, $info, $error);
             }
-            $this->promise('finally', 0, $info);
-            curl_close($this->curl(0));
-            $this->loadedTrigger();
+            $instance->promise('finally', $index, $info);
+            curl_close($ch);
         }
         return $this;
     }
-    private function promise(string $name, int $index, array $info = [], string $error = null)
+    public function promise(string $event, int $index, array $info = [], string $error = null)
     {
-        if (array_key_exists($index, $this->value($name)) === false) {
+        $isLoaded = $event === 'finally' && $index + 1 === $this->index;
+        if (array_key_exists($index, $this->{$event}) === false) {
             return false;
         }
-        $callback = $this->arrayValue($name, $index);
-        $response = $this->response($index);
-        $function = new \ReflectionFunction($callback);
+        $callback = $this->{$event}[$index];
+        $response = $this->response[$index];
+        $function = new ReflectionFunction($callback);
         $argument = $function->getParameters();
         [$argument] = $function->getParameters() + [null];
         if (isset($argument) === true && $argument->hasType()) {
@@ -373,14 +321,10 @@ class RequestCurl
                 }
             }
         }
-        try {
-            $response = $callback($response, $info, $error);
-        } catch (\Throwable $th) {
-            self::$logger && call_user_func(self::$logger, $th);
-            return;
-        }
         if ($function->hasReturnType()) {
-            $this->responseValue($index, $response);
+            $this->response[$index] = $callback($response, $info, $error);
+        } else {
+            $callback($response, $info, $error);
         }
     }
     public function __call($name, $arguments)
@@ -404,17 +348,11 @@ class RequestCurl
     }
     public function __destruct()
     {
-        if (!static::$isIsolate && !$this->executed) {
+        if (!$this->executed) {
             $this->execute();
         }
-        $this->headers = [];
-        $this->noStaticCurl = [
-            'curl' => [],
-            'index' => 0,
-            'then' => [],
-            'catch' => [],
-            'finally' => [],
-            'response' => [],
-        ];
+
+        $this->index = 0;
+        $this->response = $this->then = $this->catch = $this->finally = $this->ch = [];
     }
 }
