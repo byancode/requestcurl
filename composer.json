@@ -1,6 +1,6 @@
 {
 	"name": "byancode/requestcurl",
-	"description": "Multicurl sync",
+	"description": "Multicurl Async",
 	"type": "php",
 	"authors": [
 		{

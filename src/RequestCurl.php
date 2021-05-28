@@ -24,6 +24,7 @@ class RequestCurl
     private $index = 0;
     private $then = [];
     private $catch = [];
+    public $headers = [];
     private $finally = [];
     public $response = [];
     private $tracked = false;
@@ -330,7 +331,7 @@ class RequestCurl
 
         try {
             $response = $callback($response, $info, $error);
-        } catch (\Throwable $th) {
+        } catch (\Throwable$th) {
             self::$logger && call_user_func(self::$logger, $th);
             return;
         }
